@@ -3,8 +3,9 @@ from dataclasses import replace
 
 from batches.registry import initialize_rosters, write_transaction
 from batches.units import require_identifier
+from prediction.online import initialize_online_commitments
 from prediction.package import decode_forecast, encode_forecast
-from training.admission import initialize_training_inputs
+from training.admission import initialize_online_training, initialize_training_inputs
 from training.catalog import initialize_models
 
 
@@ -16,6 +17,8 @@ def open_prediction(path):
             initialize_rosters(db)
             initialize_training_inputs(db)
             initialize_models(db)
+            initialize_online_commitments(db)
+            initialize_online_training(db)
             db.execute('''
                 CREATE TABLE IF NOT EXISTS issued_forecasts (
                     package_id TEXT PRIMARY KEY NOT NULL,

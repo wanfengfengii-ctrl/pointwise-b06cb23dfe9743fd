@@ -44,10 +44,49 @@ def open_review(path):
                     UNIQUE (report_id, piece_id)
                 )
             ''')
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS online_commitments (
+                    roster_id TEXT NOT NULL REFERENCES rosters(roster_id),
+                    piece_id TEXT NOT NULL,
+                    commitment_id TEXT NOT NULL UNIQUE,
+                    body TEXT NOT NULL,
+                    PRIMARY KEY (roster_id, piece_id)
+                )
+            ''')
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS online_predictions (
+                    roster_id TEXT NOT NULL REFERENCES rosters(roster_id),
+                    piece_id TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    PRIMARY KEY (roster_id, piece_id)
+                )
+            ''')
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS online_reports (
+                    report_id TEXT PRIMARY KEY NOT NULL,
+                    roster_id TEXT NOT NULL REFERENCES rosters(roster_id),
+                    piece_id TEXT NOT NULL,
+                    receipt_id TEXT NOT NULL REFERENCES measurement_receipts(receipt_id),
+                    commitment_id TEXT NOT NULL REFERENCES online_commitments(commitment_id),
+                    cutoff INTEGER NOT NULL,
+                    first TEXT NOT NULL,
+                    second TEXT NOT NULL,
+                    actual TEXT NOT NULL,
+                    delta TEXT NOT NULL,
+                    UNIQUE (roster_id, piece_id)
+                )
+            ''')
     except BaseException:
         db.close()
         raise
     return db
+
+
+_ONLINE_REPORT_SELECT = '''
+    SELECT r.report_id, s.batch_id, r.roster_id, r.piece_id, r.receipt_id, r.commitment_id,
+           r.cutoff, r.first, r.second, r.actual, r.delta
+    FROM online_reports r JOIN rosters s ON s.roster_id = r.roster_id
+'''
 
 
 class ReviewStore:
@@ -109,3 +148,64 @@ class ReviewStore:
             FROM report_pieces WHERE report_id = ? ORDER BY position
         ''', (report_id,)).fetchall()
         return header, rows
+
+    def find_online_commitment(self, roster_id, piece_id):
+        require_identifier(roster_id, 'roster ID')
+        require_identifier(piece_id, 'piece ID')
+        row = self.db.execute('''
+            SELECT body FROM online_commitments WHERE roster_id = ? AND piece_id = ?
+        ''', (roster_id, piece_id)).fetchone()
+        return None if row is None else row[0]
+
+    def find_online_commitment_piece(self, commitment_id):
+        require_identifier(commitment_id, 'commitment ID')
+        row = self.db.execute('''
+            SELECT roster_id, piece_id FROM online_commitments WHERE commitment_id = ?
+        ''', (commitment_id,)).fetchone()
+        return None if row is None else (row[0], row[1])
+
+    def write_online_commitment(self, roster_id, piece_id, commitment_id, body):
+        self.db.execute('''
+            INSERT INTO online_commitments (roster_id, piece_id, commitment_id, body)
+            VALUES (?, ?, ?, ?)
+        ''', (roster_id, piece_id, commitment_id, body))
+
+    def find_online_prediction(self, roster_id, piece_id):
+        require_identifier(roster_id, 'roster ID')
+        require_identifier(piece_id, 'piece ID')
+        row = self.db.execute('''
+            SELECT body FROM online_predictions WHERE roster_id = ? AND piece_id = ?
+        ''', (roster_id, piece_id)).fetchone()
+        return None if row is None else row[0]
+
+    def write_online_prediction(self, roster_id, piece_id, body):
+        self.db.execute('''
+            INSERT INTO online_predictions (roster_id, piece_id, body) VALUES (?, ?, ?)
+        ''', (roster_id, piece_id, body))
+
+    def find_online_report(self, roster_id, piece_id):
+        require_identifier(roster_id, 'roster ID')
+        require_identifier(piece_id, 'piece ID')
+        return self.db.execute(f'''
+            {_ONLINE_REPORT_SELECT} WHERE r.roster_id = ? AND r.piece_id = ?
+        ''', (roster_id, piece_id)).fetchone()
+
+    def write_online_report(self, report_id, roster_id, piece_id, receipt_id, commitment_id,
+                            cutoff, first, second, actual, delta):
+        self.db.execute('''
+            INSERT INTO online_reports
+                (report_id, roster_id, piece_id, receipt_id, commitment_id,
+                 cutoff, first, second, actual, delta)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (report_id, roster_id, piece_id, receipt_id, commitment_id, cutoff,
+              encode_fraction(first), encode_fraction(second),
+              encode_fraction(actual), encode_fraction(delta)))
+
+    def read_online_report(self, report_id):
+        require_identifier(report_id, 'report ID')
+        row = self.db.execute(f'''
+            {_ONLINE_REPORT_SELECT} WHERE r.report_id = ?
+        ''', (report_id,)).fetchone()
+        if row is None:
+            raise KeyError(report_id)
+        return row

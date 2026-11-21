@@ -84,6 +84,14 @@ class MeasurementLedger:
         ''', (roster_id,))
         return {row[2]: _receipt(row) for row in rows}
 
+    def first_receipt(self, roster_id, piece_id):
+        """The piece's first formal receipt, before any later corrections."""
+        row = self.db.execute(f'''
+            SELECT {_RECEIPT_COLUMNS} FROM measurement_receipts r
+            WHERE r.roster_id = ? AND r.piece_id = ? AND r.previous_id IS NULL
+        ''', (roster_id, piece_id)).fetchone()
+        return None if row is None else _receipt(row)
+
     def _append(self, roster_id, piece_id, source, value, previous_id=None):
         ordinal = self.db.execute(
             'SELECT COALESCE(MAX(ordinal), 0) + 1 FROM measurement_receipts'
