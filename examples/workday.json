@@ -1,0 +1,9 @@
+{
+  "gauge_id": "G-17",
+  "gauge_provenance": "量规校验单 QC-17",
+  "nominal_um": "11",
+  "pieces": ["B", "A"],
+  "history": {"batch_id": "H", "values": ["8", "11"], "corrected_last": "12"},
+  "target": {"batch_id": "T", "values": ["13", "11"]},
+  "models": ["MZ", "MA"]
+}
